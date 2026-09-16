@@ -1,77 +1,63 @@
 package realisticSwimming;
 
+import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import realisticSwimming.main.RSMain;
 
 public class Placeholders extends PlaceholderExpansion {
-	
-	private static Plugin plugin;
-	
-	public Placeholders(Plugin minevolt) {
-		plugin = minevolt;
-	}
-	
+
+    private final Plugin plugin;
+
+    public Placeholders(Plugin plugin) {
+        this.plugin = plugin;
+    }
+
     @Override
-    public boolean persist(){
+    public boolean persist() {
         return true;
-    }  
+    }
 
-   @Override
-   public boolean canRegister(){
-       return true;
-   }
+    @Override
+    public boolean canRegister() {
+        return true;
+    }
 
-   @Override
-   public String getAuthor(){
-       return plugin.getDescription().getAuthors().toString();
-   }
+    @Override
+    public @NotNull String getAuthor() {
+        return String.join(", ", plugin.getDescription().getAuthors());
+    }
 
-	@Override
-	public String getIdentifier(){
-		return plugin.getDescription().getName();
-	}
+    @Override
+    public @NotNull String getIdentifier() {
+        return "realisticswimming";
+    }
 
-	@Override
-	public String getVersion(){
-		return plugin.getDescription().getVersion();
-	}
+    @Override
+    public @NotNull String getVersion() {
+        return plugin.getDescription().getVersion();
+    }
 
-	@Override
-	public String onPlaceholderRequest(Player player, String identifier){
-		if(identifier.equals("swim_toggled")){
-			if(player.hasMetadata("swimmingDisabled"))
-				return "false";
-			else
-				return "true";
-		}
-		if(identifier.equals("fall_toggled")){
-			if(player.hasMetadata("fallingDisabled"))
-				return "false";
-			else
-				return "true";
-		}
-		if(identifier.equals("is_swimming")){
-			if(player.hasMetadata("swimming"))
-				return "true";
-			else
-				return "false";
-		}
-		if(identifier.equals("is_falling")){
-			if(player.hasMetadata("falling"))
-				return "true";
-			else
-				return "false";
-		}
-		if(identifier.equals("current_stamina")){
-			return Float.toString(RSMain.getMain().getPlayerStamina(player));
-		}
-		if(identifier.equals("max_stamina")){
-			return Float.toString(1000);
-		}
-		return "";
-	}
-	
+    @Override
+    public @Nullable String onPlaceholderRequest(Player player, @NotNull String identifier) {
+        if (identifier.equals("max_stamina")) {
+            return "1000";
+        }
+
+        if (player == null) {
+            return null;
+        }
+
+        return switch (identifier) {
+            case "swim_toggled" -> Boolean.toString(!player.hasMetadata("swimmingDisabled"));
+            case "fall_toggled" -> Boolean.toString(!player.hasMetadata("fallingDisabled"));
+            case "is_swimming" -> Boolean.toString(player.hasMetadata("swimming"));
+            case "is_falling" -> Boolean.toString(player.hasMetadata("falling"));
+            case "current_stamina" -> Float.toString(RSMain.getMain().getPlayerStamina(player));
+            default -> null;
+        };
+    }
 }
