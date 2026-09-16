@@ -11,216 +11,159 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 package realisticSwimming.main;
 
 import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityToggleGlideEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerToggleSprintEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitRunnable;
+
 import realisticSwimming.Config;
 import realisticSwimming.Utility;
 import realisticSwimming.events.PlayerStartSwimmingEvent;
 import realisticSwimming.stamina.Stamina;
 
-public class RSwimListener implements Listener{
+public class RSwimListener implements Listener {
 
-    private Plugin plugin;
-    private HashMap<Player, Stamina> playerStamina;
+    private final Plugin plugin;
+    private final Map<UUID, Stamina> playerStamina = new HashMap<>();
 
-    RSwimListener(Plugin plugin){
+    RSwimListener(Plugin plugin) {
         this.plugin = plugin;
-        if(Config.enableStamina) {
-        	playerStamina = new HashMap<Player, Stamina>();
-        }
     }
 
     @EventHandler
-    public void onPlayerMoveEvent(PlayerMoveEvent event){
+    public void onPlayerMoveEvent(PlayerMoveEvent event) {
+        Player player = event.getPlayer();
 
-        Player p = event.getPlayer();
-        ItemStack elytra = p.getInventory().getChestplate();
-
-        if(playerCanSwim(p)){
-            if(event.getTo().getY()<=event.getFrom().getY() || Config.enableSwimmingUp){
-
-                //Only start swimming animation if the user did not disable it
-                if(!p.hasMetadata("swimmingDisabled") && Utility.playerHasPermission(p, "rs.user.swim")){
-
-                    //fix NCP false alarm
-                    //Utility.ncpFix(p);
-
-                    if(p.isSprinting()){
-                        p.setGliding(false);
-                    }else{
-                        p.setGliding(true);
-                    }
-
-                    startSwimming(p);
-                    //boost(p);
+        if (playerCanSwim(player)) {
+            if (event.getTo().getY() <= event.getFrom().getY() || Config.enableSwimmingUp) {
+                if (!player.hasMetadata("swimmingDisabled")
+                        && Utility.playerHasPermission(player, "rs.user.swim")) {
+                    player.setGliding(!player.isSprinting());
+                    startSwimming(player);
                 }
-
-                //EXPERMIMENTAL fix to prevent elytra from loosing durability while swimming
-                if(!Config.durabilityLoss && elytra!=null && elytra.getType()==Material.ELYTRA && !elytra.getEnchantments().containsKey(Enchantment.DURABILITY)){
-                    ItemMeta meta = elytra.getItemMeta();
-                    meta.addEnchant(Enchantment.DURABILITY, 100, true);
-                    elytra.setItemMeta(meta);
-                }
-
+            } else if (event.getTo().getY() <= 62) {
+                player.setGliding(false);
             }
-            else if(event.getTo().getY()<=62){
-                p.setGliding(false);
-            }
+        }
+    }
 
-        }else{
-
-            //EXPERMIMENTAL fix to prevent elytra from loosing durability while swimming
-            if(!Config.durabilityLoss && elytra!=null && elytra.getType()==Material.ELYTRA && elytra.getEnchantmentLevel(Enchantment.DURABILITY)==100){
-                ItemMeta meta = elytra.getItemMeta();
-                meta.removeEnchant(Enchantment.DURABILITY);
-                elytra.setItemMeta(meta);
-            }
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerItemDamage(PlayerItemDamageEvent event) {
+        if (!Config.durabilityLoss
+                && event.getItem().getType() == Material.ELYTRA
+                && event.getPlayer().hasMetadata("swimming")) {
+            event.setCancelled(true);
         }
     }
 
     @EventHandler
-    public void onEntityToggleGlideEvent(EntityToggleGlideEvent event){
-        if(event.getEntity() instanceof Player){
-            Player p = (Player) event.getEntity();
-            if(playerCanSwim(p) && !p.hasMetadata("swimmingDisabled")){
-                event.setCancelled(true);
-            }
-        }
-    }
-
-    //EXPERMIMENTAL fix to prevent elytra from loosing durability while swimming
-    @EventHandler
-    public void onInventoryClickEvent(InventoryClickEvent event){
-        try{
-            if(event.getCurrentItem().getType()==Material.ELYTRA && event.getInventory().getHolder() instanceof Player){
-                ItemStack elytra = event.getCurrentItem();
-                if(!Config.durabilityLoss && elytra!=null && elytra.getType()==Material.ELYTRA && elytra.getEnchantmentLevel(Enchantment.DURABILITY)==100){
-                    ItemMeta meta = elytra.getItemMeta();
-                    meta.removeEnchant(Enchantment.DURABILITY);
-                    elytra.setItemMeta(meta);
-                }
-            }
-        }catch(NullPointerException ignored){
-
+    public void onEntityToggleGlideEvent(EntityToggleGlideEvent event) {
+        if (event.getEntity() instanceof Player player
+                && playerCanSwim(player)
+                && !player.hasMetadata("swimmingDisabled")) {
+            event.setCancelled(true);
         }
     }
 
     @EventHandler
-    public void onPlayerToggleSprintEvent(PlayerToggleSprintEvent event){
-        Player p = event.getPlayer();
-        if(p.isSwimming() && !event.isSprinting()){
-            p.setSwimming(false);
-            p.setGliding(true);
+    public void onPlayerToggleSprintEvent(PlayerToggleSprintEvent event) {
+        Player player = event.getPlayer();
+        if (player.isSwimming() && !event.isSprinting()) {
+            player.setSwimming(false);
+            player.setGliding(true);
         }
     }
 
-    public void startSwimming(Player p){
-        //start the stamina system
-        if(!p.hasMetadata("swimming")){
-            startStaminaSystem(p);
-            FixedMetadataValue m = new FixedMetadataValue(plugin, null);
-            p.setMetadata("swimming", m);
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Stamina stamina = playerStamina.remove(event.getPlayer().getUniqueId());
+        if (stamina != null && !stamina.isCancelled()) {
+            stamina.cancel();
+        }
+        event.getPlayer().removeMetadata("swimming", plugin);
+    }
 
-            //Fire PlayerStartSwimmingEvent
-            PlayerStartSwimmingEvent event = new PlayerStartSwimmingEvent(p);
+    public void startSwimming(Player player) {
+        if (!player.hasMetadata("swimming")) {
+            startStaminaSystem(player);
+            player.setMetadata("swimming", new FixedMetadataValue(plugin, null));
+
+            PlayerStartSwimmingEvent event = new PlayerStartSwimmingEvent(player);
             Bukkit.getServer().getPluginManager().callEvent(event);
         }
     }
 
-    public boolean playerCanSwim(Player p){
-        if(p.getLocation().getBlock().getType()==Material.WATER && p.getLocation().subtract(0, Config.minWaterDepth, 0).getBlock().getType()==Material.WATER && p.getVehicle()==null && !Utility.playerIsInCreativeMode(p) && !p.isFlying()){
+    public boolean playerCanSwim(Player player) {
+        if (player.getLocation().getBlock().getType() == Material.WATER
+                && player.getLocation().subtract(0, Config.minWaterDepth, 0).getBlock().getType() == Material.WATER
+                && player.getVehicle() == null
+                && !Utility.playerIsInCreativeMode(player)
+                && !player.isFlying()) {
+            return !isInWaterElevator(player);
+        }
+        return false;
+    }
 
-            //TODO make configurable
-            return !isInWaterElevator(p);
+    public void boost(Player player) {
+        if (Utility.playerHasPermission(player, "rs.user.boost")
+                && Config.enableBoost
+                && player.isSprinting()
+                && (player.getLocation().getDirection().getY() < -0.1 || !Config.ehmCompatibility)) {
+            player.setVelocity(player.getLocation().getDirection().multiply(Config.sprintSpeed));
+        }
+    }
 
-        }else{
+    public void startStaminaSystem(Player player) {
+        if (!Utility.playerHasPermission(player, "rs.bypass.stamina") || !Config.permsReq) {
+            Stamina existing = playerStamina.remove(player.getUniqueId());
+            if (existing != null && !existing.isCancelled()) {
+                existing.cancel();
+            }
+
+            Stamina stamina = new Stamina(plugin, player, this);
+            stamina.runTaskTimer(plugin, 0L, Math.max(1, Config.staminaUpdateDelay));
+            playerStamina.put(player.getUniqueId(), stamina);
+        }
+    }
+
+    public static boolean isInWaterElevator(Player player) {
+        if (!Config.disableSwimInWaterfall) {
             return false;
         }
+
+        int width = Math.max(1, Config.maxWaterfallDiameter);
+        return player.getLocation().add(width, 0, 0).getBlock().getType() != Material.WATER
+                && player.getLocation().add(-width, 0, 0).getBlock().getType() != Material.WATER
+                && player.getLocation().add(0, 0, width).getBlock().getType() != Material.WATER
+                && player.getLocation().add(0, 0, -width).getBlock().getType() != Material.WATER;
     }
 
-    public void boost(Player p){
-        if(Utility.playerHasPermission(p, "rs.user.boost") && Config.enableBoost && p.isSprinting() && (p.getLocation().getDirection().getY()<-0.1 || !Config.ehmCompatibility)){
-            p.setVelocity(p.getLocation().getDirection().multiply(Config.sprintSpeed));
-        }
-    }
-
-    public void startStaminaSystem(Player p){
-        if(!Utility.playerHasPermission(p, "rs.bypass.stamina") || !Config.permsReq){
-
-            //Debug
-            //p.sendMessage("Starting stamina system...");
-
-            //****************************** Changes by DrkMatr1984 START ******************************
-            Stamina stamina = new Stamina(plugin, p, this);
-            stamina.runTaskTimer(plugin, 0, Config.staminaUpdateDelay);
-            playerStamina.put(p, stamina);
-            
-            //****************************** Changes by DrkMatr1984 END ******************************
-        }
-    }
-
-    public static boolean isInWaterElevator(Player p){
-
-        if(!Config.disableSwimInWaterfall){
-            return false;
-        }
-
-        //TODO make configurable
-        int width = Config.maxWaterfallDiameter;
-
-        if(p.getLocation().add(width, 0, 0).getBlock().getType() != Material.WATER
-                && p.getLocation().add(-width, 0, 0).getBlock().getType() != Material.WATER
-                && p.getLocation().add(0, 0, width).getBlock().getType() != Material.WATER
-                && p.getLocation().add(0, 0, -width).getBlock().getType() != Material.WATER){
-            return true;
-        }else {
-            return false;
-        }
-    }
-
-    /* Not needed for 1.13
     @EventHandler
-    public void onStatisticIncrement(PlayerStatisticIncrementEvent event){
-        //Don't increment elytra statistic if the player is swimming.
-        if(event.getStatistic() == Statistic.AVIATE_ONE_CM && event.getPlayer().hasMetadata("swimming")){
+    public void blockRocketBoost(PlayerInteractEvent event) {
+        if (event.hasItem()
+                && event.getItem().getType() == Material.FIREWORK_ROCKET
+                && event.getPlayer().hasMetadata("swimming")) {
             event.setCancelled(true);
         }
     }
-    */
 
-    //Block rocket-boost while swimming
-    @EventHandler
-    public void blockRocketBoost(PlayerInteractEvent event){
-        if(event.hasItem() && event.getItem().getType() == Material.FIREWORK_ROCKET && event.getPlayer().hasMetadata("swimming")){
-            event.setCancelled(true);
-        }
-    }
-    
     public float getPlayerStamina(Player player) {
-    	if(playerStamina.containsKey(player)) {
-    		if(playerStamina.get(player).isCancelled())
-    			return 1000;
-    		if(playerStamina.get(player).getCurrentStamina() > 0)
-    			return playerStamina.get(player).getCurrentStamina();
-    		else
-    			playerStamina.get(player).cancel();
-    	}
-    	return 1000;
+        Stamina stamina = playerStamina.get(player.getUniqueId());
+        if (stamina == null || stamina.isCancelled()) {
+            return 1000;
+        }
+        return Math.max(0, stamina.getCurrentStamina());
     }
-    
 }

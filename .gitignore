@@ -1,9 +1,8 @@
 .classpath
 .project
+.settings/
+.idea/
+*.iml
 *.prefs
 *.class
-bin/LICENSE.txt
-target/classes/LICENSE.txt
-target/classes/plugin.yml
-*.lst
-target/maven-archiver/pom.properties
+target/

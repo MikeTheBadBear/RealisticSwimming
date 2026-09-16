@@ -10,6 +10,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 package realisticSwimming.main;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -21,97 +24,94 @@ import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.util.Vector;
 
-import io.github.dailystruggle.glide.Glide;
 import realisticSwimming.Config;
 import realisticSwimming.Utility;
 import realisticSwimming.events.PlayerStartFallingEvent;
 
-public class RFallListener implements Listener{
+public class RFallListener implements Listener {
 
-	private Plugin plugin;
-	private boolean glide = false;;
+    private final Plugin plugin;
+    private final Plugin glidePlugin;
 
-	public RFallListener(Plugin plugin){
-		this.plugin = plugin;
-		if(Bukkit.getServer().getPluginManager().isPluginEnabled("Glide") && 
-				Bukkit.getServer().getPluginManager().getPlugin("Glide")!=null)
-			glide = true;
-			
-	}
+    public RFallListener(Plugin plugin) {
+        this.plugin = plugin;
+        this.glidePlugin = Bukkit.getPluginManager().getPlugin("Glide");
+    }
 
-	@EventHandler
-	public void onPlayerMoveEvent(PlayerMoveEvent event){
-		Player p = event.getPlayer();
-		//p.sendMessage(""+p.getFallDistance());
-		//p.sendMessage(""+p.getVelocity().getY());
-		if(playerCanFall(p)){			
-			//fix NCP false alarm
-			//Utility.ncpFix(p);
+    @EventHandler
+    public void onPlayerMoveEvent(PlayerMoveEvent event) {
+        Player player = event.getPlayer();
+        if (playerCanFall(player)) {
+            player.setGliding(true);
+            player.setMetadata("falling", new FixedMetadataValue(plugin, null));
+        } else if (player.hasMetadata("falling")) {
+            player.removeMetadata("falling", plugin);
+        }
+    }
 
-			p.setGliding(true);
-			FixedMetadataValue m = new FixedMetadataValue(plugin, null);
-			p.setMetadata("falling", m);
-		}else if(p.hasMetadata("falling")){
-			p.removeMetadata("falling", plugin);
-		}
-	}
-	
-	@EventHandler
-	public void onEntityToggleGlideEvent(EntityToggleGlideEvent event){
-		if(event.getEntity() instanceof Player){
-			Player p = (Player) event.getEntity();
-			if(playerCanFall(p) && p.getLocation().subtract(0, 1, 0).getBlock().getType()!=Material.WATER){
-				
-				//****************************** Changes by DrkMatr1984 START ******************************
-				PlayerStartFallingEvent e = new PlayerStartFallingEvent(p);
-				Bukkit.getServer().getPluginManager().callEvent(e);
-				if(!e.isCancelled()){
-					p.setVelocity(new Vector(p.getLocation().getDirection().getX()* Config.fallGlideSpeed, Config.fallDownwardSpeed*-1, p.getLocation().getDirection().getZ()*Config.fallGlideSpeed));
-					event.setCancelled(true);
-				}else{
-					p.setGliding(false);
-				}
-				//****************************** Changes by DrkMatr1984 END ******************************
-			}
-		}
-	}
-	
-	@EventHandler
-	public void onPlayerFall(PlayerStartFallingEvent event) {
-		if(glide)
-			if(Glide.isGliding(event.getPlayer())) {
-				event.setCancelled(true);
-			}
-				
-	}
-	
-	public boolean playerCanFall(Player p){
-		if(!p.hasMetadata("fallingDisabled")&& Utility.playerHasPermission(p, "rs.user.fall") && p.getFallDistance()>Config.minFallDistance && Config.enableFall && p.getLocation().getBlock().getType()!=Material.WATER && p.getLocation().subtract(0, 1, 0).getBlock().getType() == Material.AIR){
-			//****************************** Changes by DrkMatr1984 START ******************************
-			if(isElytraDeploying(p)){
-				return false;
-			}
-			//****************************** Changes by DrkMatr1984 END ******************************
-			return true;
-		}
-		return false;
-	}
-	
-	//****************************** Changes by DrkMatr1984 START ******************************
-	public boolean isElytraDeploying(Player p){
-		if(Bukkit.getPluginManager().isPluginEnabled("Elytra")){
-			if(p.hasPermission("elytra.auto")){
-				if(Utility.isElytraWeared(p)){
-					return true;
-				}else{
-					if(p.hasPermission("elytra.auto-equip") && Utility.hasElytraStorage(p)){
-						return true;
-					}
-				}
-			}
-		}	
-		return false;
-	}
-	
-	//****************************** Changes by DrkMatr1984 END ******************************
+    @EventHandler
+    public void onEntityToggleGlideEvent(EntityToggleGlideEvent event) {
+        if (event.getEntity() instanceof Player player
+                && playerCanFall(player)
+                && player.getLocation().subtract(0, 1, 0).getBlock().getType() != Material.WATER) {
+            PlayerStartFallingEvent fallingEvent = new PlayerStartFallingEvent(player);
+            Bukkit.getPluginManager().callEvent(fallingEvent);
+
+            if (!fallingEvent.isCancelled()) {
+                player.setVelocity(new Vector(
+                        player.getLocation().getDirection().getX() * Config.fallGlideSpeed,
+                        -Config.fallDownwardSpeed,
+                        player.getLocation().getDirection().getZ() * Config.fallGlideSpeed));
+                event.setCancelled(true);
+            } else {
+                player.setGliding(false);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerFall(PlayerStartFallingEvent event) {
+        if (isGlidePluginGliding(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    public boolean playerCanFall(Player player) {
+        if (!player.hasMetadata("fallingDisabled")
+                && Utility.playerHasPermission(player, "rs.user.fall")
+                && player.getFallDistance() > Config.minFallDistance
+                && Config.enableFall
+                && player.getLocation().getBlock().getType() != Material.WATER
+                && player.getLocation().subtract(0, 1, 0).getBlock().getType() == Material.AIR) {
+            return !isElytraDeploying(player);
+        }
+        return false;
+    }
+
+    public boolean isElytraDeploying(Player player) {
+        Plugin elytraPlugin = Bukkit.getPluginManager().getPlugin("Elytra");
+        if (elytraPlugin != null && elytraPlugin.isEnabled() && player.hasPermission("elytra.auto")) {
+            return Utility.isElytraWeared(player)
+                    || (player.hasPermission("elytra.auto-equip") && Utility.hasElytraStorage(player));
+        }
+        return false;
+    }
+
+    private boolean isGlidePluginGliding(Player player) {
+        if (glidePlugin == null || !glidePlugin.isEnabled()) {
+            return false;
+        }
+
+        try {
+            Class<?> glideClass = Class.forName(
+                    "io.github.dailystruggle.glide.Glide",
+                    false,
+                    glidePlugin.getClass().getClassLoader());
+            Method isGliding = glideClass.getMethod("isGliding", Player.class);
+            return Boolean.TRUE.equals(isGliding.invoke(null, player));
+        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+                 | InvocationTargetException | LinkageError ignored) {
+            return false;
+        }
+    }
 }

@@ -15,56 +15,46 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.Damageable;
+import org.bukkit.inventory.meta.ItemMeta;
 
-public class Utility {
+public final class Utility {
 
-    public static boolean playerHasPermission(Player p, String perm){
-        if(!Config.permsReq){
-            return true;
-        }else if(p.hasPermission(perm)){
-            return true;
-        }else{
-            return false;
-        }
+    private Utility() {
     }
 
-    public static boolean playerIsInCreativeMode(Player p){
-        if(Config.enabledInCreative){
-            return false;
-        }else if(p.getGameMode()== GameMode.CREATIVE){
-            return true;
-        }else{
-            return false;
-        }
+    public static boolean playerHasPermission(Player player, String permission) {
+        return !Config.permsReq || player.hasPermission(permission);
     }
 
-    /*public static void ncpFix(Player p){
-        p.addAttachment(RSMain.getMain(), "nocheatplus.checks", true, Config.noCheatPlusExemptionTimeInTicks);
-    }*/
-    
-    //****************************** Changes by DrkMatr1984 START ******************************
+    public static boolean playerIsInCreativeMode(Player player) {
+        return !Config.enabledInCreative && player.getGameMode() == GameMode.CREATIVE;
+    }
+
     public static boolean isElytraWeared(Player player) {
-        if (player.getInventory().getChestplate() == null) return false;
-        if (player.getInventory().getChestplate().getType() != Material.ELYTRA) return false;
-        if (player.getInventory().getChestplate().getDurability() >= 431) return false;
-        return true;
+        return isUsableElytra(player.getInventory().getChestplate());
     }
-    
+
     public static boolean hasElytraStorage(Player player) {
-    	PlayerInventory inv = player.getInventory();
-    	if(inv.getStorageContents()!=null){
-    		for(ItemStack item : inv.getStorageContents()){
-    			if(item!=null){
-    				if(!item.getType().equals(Material.AIR)){
-            			if(item.getType().equals(Material.ELYTRA)){
-            				if(item.getDurability() <= 431)
-            					return true;
-            			}
-            		}
-    			}     		
-        	}
-    	}
-    	return false;
+        PlayerInventory inventory = player.getInventory();
+        for (ItemStack item : inventory.getStorageContents()) {
+            if (isUsableElytra(item)) {
+                return true;
+            }
+        }
+        return false;
     }
-    //****************************** Changes by DrkMatr1984 END ******************************
+
+    private static boolean isUsableElytra(ItemStack item) {
+        if (item == null || item.getType() != Material.ELYTRA) {
+            return false;
+        }
+
+        ItemMeta meta = item.getItemMeta();
+        if (!(meta instanceof Damageable damageable)) {
+            return true;
+        }
+
+        return damageable.getDamage() < item.getType().getMaxDurability() - 1;
+    }
 }
